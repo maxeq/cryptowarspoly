@@ -19,6 +19,10 @@ async function main() {
     const boxSales = await BoxSalesFactory.deploy(gameToken.target, avatars.target);
     await boxSales.waitForDeployment();
     console.log("BoxSales deployed to:", boxSales.target);
+
+    // 4. Add BoxSales as a minter in GameToken
+    await gameToken.addMinter(boxSales.target);
+    console.log("BoxSales added as a minter for GameToken");
 }
 
 // We recommend this pattern to be able to use async/await everywhere and properly handle errors.

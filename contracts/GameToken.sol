@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.9;
+pragma solidity ^0.8.19;
 
 contract GameToken {
     string public constant name = "GameToken";
@@ -9,6 +9,7 @@ contract GameToken {
     uint256 public totalSupply;
     address public owner;
     mapping(address => uint256) public balanceOf;
+    mapping(address => bool) public minters;
 
     event Spent(address indexed user, uint256 value);
     event Burned(uint256 value);
@@ -17,11 +18,25 @@ contract GameToken {
         totalSupply = initialSupply;
         balanceOf[msg.sender] = initialSupply;
         owner = msg.sender;
+        minters[owner] = true;
     }
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only the owner can call this function");
         _;
+    }
+
+    modifier onlyMinter() {
+        require(minters[msg.sender], "Only minters can call this function");
+        _;
+    }
+
+    function addMinter(address _minter) external onlyOwner {
+        minters[_minter] = true;
+    }
+
+    function removeMinter(address _minter) external onlyOwner {
+        minters[_minter] = false;
     }
 
     function spend(uint256 _value) external {
@@ -41,9 +56,8 @@ contract GameToken {
         emit Burned(_value);
     }
 
-    function mint(address _account, uint256 _value) external onlyOwner {
+    function mint(address _account, uint256 _value) external onlyMinter {
         totalSupply += _value;
         balanceOf[_account] += _value;
     }
-
 }

@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.19;
 
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "./GameToken.sol";
 import "./Avatars.sol";
 
-contract BoxSales is ERC721Enumerable {
+contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, AccessControl {
     using Counters for Counters.Counter;
+
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     Counters.Counter private _tokenIdCounter;
 
     GameToken public gameToken;
     Avatars public avatars;
-
-    address public owner;
 
     enum BoxType { Bronze, Silver, Gold }
     mapping(BoxType => uint256) public boxPriceInWei;
@@ -25,7 +30,10 @@ contract BoxSales is ERC721Enumerable {
     constructor(address _gameToken, address _avatars) ERC721("BoxNFT", "BOX") {
         gameToken = GameToken(_gameToken);
         avatars = Avatars(_avatars);
-        owner = msg.sender;
+
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(PAUSER_ROLE, msg.sender);
+        _setupRole(MINTER_ROLE, msg.sender);
 
         boxPriceInWei[BoxType.Bronze] = 0.01 ether;
         boxPriceInWei[BoxType.Silver] = 0.05 ether; 
@@ -36,50 +44,59 @@ contract BoxSales is ERC721Enumerable {
         tokensRewarded[BoxType.Gold] = 100; 
     }
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only the owner can call this function");
+    modifier onlyRole(bytes32 role) {
+        require(hasRole(role, msg.sender), "Caller is not in the required role");
         _;
     }
 
-    function buyBox(BoxType _boxType) public payable {
-        require(msg.value == boxPriceInWei[_boxType], "Incorrect Ether sent");
+    function _baseURI() internal pure override returns (string memory) {
+        return "https://leagueofcryptowars.com";
+    }
 
-        _mint(msg.sender, _tokenIdCounter.current());
+    function pause() public onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() public onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+
+    function safeMint(address to, string memory uri) public onlyRole(MINTER_ROLE) {
+        uint256 tokenId = _tokenIdCounter.current();
         _tokenIdCounter.increment();
-
-        emit BoxPurchased(msg.sender, _boxType);
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, uri);
     }
 
-    function unbox() public {
-        uint256 tokenId = _tokenIdOfBoxOwnedBy(msg.sender);
-        _burn(tokenId);
-
-        BoxType ownedBox = BoxType(tokenId % 3); // Simple way to determine box type from tokenId
-
-        string memory boxName = _getBoxName(ownedBox);
-        uint256 avatarId = avatars.mintRandomAvatarFromBox(boxName);
-
-        uint256 tokenReward = tokensRewarded[ownedBox];
-        gameToken.mint(msg.sender, tokenReward);
-
-        emit BoxUnboxed(msg.sender, avatarId, tokenReward);
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
+        internal
+        whenNotPaused
+        override(ERC721, ERC721Enumerable)
+    {
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
     }
 
-    function setBoxPrice(BoxType _boxType, uint256 _priceInWei) external onlyOwner {
-        boxPriceInWei[_boxType] = _priceInWei;
+    // The following functions are overrides required by Solidity.
+
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+        super._burn(tokenId);
     }
 
-    function setTokenReward(BoxType _boxType, uint256 _tokenReward) external onlyOwner {
-        tokensRewarded[_boxType] = _tokenReward;
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override(ERC721, ERC721URIStorage)
+        returns (string memory)
+    {
+        return super.tokenURI(tokenId);
     }
 
-    function _getBoxName(BoxType _boxType) private pure returns (string memory) {
-        if (_boxType == BoxType.Bronze) return "Bronze Box";
-        if (_boxType == BoxType.Silver) return "Silver Box";
-        return "Gold Box";
-    }
-
-    function _tokenIdOfBoxOwnedBy(address user) private view returns (uint256) {
-        return tokenOfOwnerByIndex(user, 0); // Assuming each user owns only one box at a time
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, ERC721Enumerable, ERC721URIStorage, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }

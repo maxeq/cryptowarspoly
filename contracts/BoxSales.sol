@@ -44,11 +44,6 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
         tokensRewarded[BoxType.Gold] = 100; 
     }
 
-    modifier onlyRole(bytes32 role) {
-        require(hasRole(role, msg.sender), "Caller is not in the required role");
-        _;
-    }
-
     function _baseURI() internal pure override returns (string memory) {
         return "https://leagueofcryptowars.com";
     }

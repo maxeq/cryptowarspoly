@@ -19,10 +19,12 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
 
     GameToken public gameToken;
     Avatars public avatars;
+    address public owner;
 
     enum BoxType { Bronze, Silver, Gold }
     mapping(BoxType => uint256) public boxPriceInWei;
     mapping(BoxType => uint256) public tokensRewarded;
+    mapping(BoxType => string) public boxURIs;
 
     event BoxPurchased(address indexed user, BoxType boxType);
     event BoxUnboxed(address indexed user, uint256 avatarId, uint256 tokenAmount);
@@ -30,6 +32,7 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
     constructor(address _gameToken, address _avatars) ERC721("BoxNFT", "BOX") {
         gameToken = GameToken(_gameToken);
         avatars = Avatars(_avatars);
+        owner = msg.sender;
 
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(PAUSER_ROLE, msg.sender);
@@ -42,6 +45,64 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
         tokensRewarded[BoxType.Bronze] = 10;
         tokensRewarded[BoxType.Silver] = 50; 
         tokensRewarded[BoxType.Gold] = 100; 
+
+        // Set default URIs for each box type
+        boxURIs[BoxType.Bronze] = "https://leagueofcryptowars.com/metadata/bronze.json";
+        boxURIs[BoxType.Silver] = "https://leagueofcryptowars.com/metadata/silver.json";
+        boxURIs[BoxType.Gold] = "https://leagueofcryptowars.com/metadata/gold.json";
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only the owner can call this function");
+        _;
+    }
+
+    function buyBox(BoxType _boxType) public payable {
+        require(msg.value == boxPriceInWei[_boxType], "Incorrect Ether sent");
+
+        uint256 newTokenId = _tokenIdCounter.current();
+        _mint(msg.sender, newTokenId);
+        _setTokenURI(newTokenId, boxURIs[_boxType]);
+        _tokenIdCounter.increment();
+
+        emit BoxPurchased(msg.sender, _boxType);
+    }
+
+    function unbox() public {
+        uint256 tokenId = _tokenIdOfBoxOwnedBy(msg.sender);
+        _burn(tokenId);
+
+        BoxType ownedBox = BoxType(tokenId % 3); // Simple way to determine box type from tokenId
+
+        string memory boxName = _getBoxName(ownedBox);
+        uint256 avatarId = avatars.mintRandomAvatarFromBox(boxName);
+
+        uint256 tokenReward = tokensRewarded[ownedBox];
+        gameToken.mint(msg.sender, tokenReward);
+
+        emit BoxUnboxed(msg.sender, avatarId, tokenReward);
+    }
+
+    function setBoxPrice(BoxType _boxType, uint256 _priceInWei) external onlyOwner {
+        boxPriceInWei[_boxType] = _priceInWei;
+    }
+
+    function setTokenReward(BoxType _boxType, uint256 _tokenReward) external onlyOwner {
+        tokensRewarded[_boxType] = _tokenReward;
+    }
+
+    function setBoxURI(BoxType _boxType, string memory _uri) external onlyOwner {
+        boxURIs[_boxType] = _uri;
+    }
+
+    function _getBoxName(BoxType _boxType) private pure returns (string memory) {
+        if (_boxType == BoxType.Bronze) return "Bronze Box";
+        if (_boxType == BoxType.Silver) return "Silver Box";
+        return "Gold Box";
+    }
+
+    function _tokenIdOfBoxOwnedBy(address user) private view returns (uint256) {
+        return tokenOfOwnerByIndex(user, 0); // Assuming each user owns only one box at a time
     }
 
     function _baseURI() internal pure override returns (string memory) {

@@ -24,7 +24,7 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
     mapping(BoxType => uint256) public boxPriceInWei;
     mapping(BoxType => uint256) public tokensRewarded;
     mapping(BoxType => string) public boxURIs;
-    mapping(uint256 => BoxType) private _tokenBoxType;
+    mapping(uint256 => BoxType) internal _tokenBoxType;
 
     event BoxPurchased(address indexed user, BoxType boxType);
     event BoxUnboxed(address indexed user, uint256 avatarId, uint256 tokenAmount, BoxType boxType);
@@ -49,6 +49,49 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
         boxURIs[BoxType.Bronze] = "https://leagueofcryptowars.com/metadata/bronze_box.json";
         boxURIs[BoxType.Silver] = "https://leagueofcryptowars.com/metadata/silver_box.json";
         boxURIs[BoxType.Gold] = "https://leagueofcryptowars.com/metadata/gold_box.json";
+    }
+
+        // 1. Function to check the total count of every box type for a given owner
+    function getBoxCountByType(address owner) public view returns (uint256 bronzeCount, uint256 silverCount, uint256 goldCount) {
+        uint256 totalOwned = balanceOf(owner);
+        uint256 bronze = 0;
+        uint256 silver = 0;
+        uint256 gold = 0;
+
+        for (uint256 i = 0; i < totalOwned; i++) {
+            uint256 tokenId = tokenOfOwnerByIndex(owner, i);
+            BoxType boxType = _tokenBoxType[tokenId];
+            if (boxType == BoxType.Bronze) {
+                bronze++;
+            } else if (boxType == BoxType.Silver) {
+                silver++;
+            } else if (boxType == BoxType.Gold) {
+                gold++;
+            }
+        }
+
+        return (bronze, silver, gold);
+    }
+
+    // 2. Function to get the type of a box given its ID
+    function getBoxTypeString(uint256 tokenId) public view returns (string memory) {
+        BoxType boxType = _tokenBoxType[tokenId];
+        return _boxTypeToString(boxType);
+    }
+
+    // 3. Function to get a list of box IDs and their types for a given owner
+    function getBoxesByOwner(address owner) public view returns (uint256[] memory tokenIds, string[] memory boxTypes) {
+        uint256 totalOwned = balanceOf(owner);
+        tokenIds = new uint256[](totalOwned);
+        boxTypes = new string[](totalOwned);
+
+        for (uint256 i = 0; i < totalOwned; i++) {
+            uint256 tokenId = tokenOfOwnerByIndex(owner, i);
+            tokenIds[i] = tokenId;
+            boxTypes[i] = _boxTypeToString(_tokenBoxType[tokenId]);
+        }
+
+        return (tokenIds, boxTypes);
     }
 
     function buyBox(BoxType _boxType) public payable {

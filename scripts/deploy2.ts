@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 async function main() {
     // 1. Deploy GameToken
     const GameTokenFactory = await ethers.getContractFactory("GameToken");
-    const initialSupply = ethers.parseEther("1000"); // This will represent 1000 tokens
+    const initialSupply = ethers.parseEther("1000000"); // This will represent 1000000 tokens
     const gameToken = await GameTokenFactory.deploy(initialSupply);
     await gameToken.waitForDeployment();
     console.log("GameToken deployed to:", gameToken.target);

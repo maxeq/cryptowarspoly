@@ -19,7 +19,6 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
 
     GameToken public gameToken;
     Avatars public avatars;
-    address public owner;
 
     enum BoxType { Bronze, Silver, Gold }
     mapping(BoxType => uint256) public boxPriceInWei;
@@ -28,12 +27,11 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
     mapping(uint256 => BoxType) private _tokenBoxType;
 
     event BoxPurchased(address indexed user, BoxType boxType);
-    event BoxUnboxed(address indexed user, uint256 avatarId, uint256 tokenAmount);
+    event BoxUnboxed(address indexed user, uint256 avatarId, uint256 tokenAmount, BoxType boxType);
 
     constructor(address _gameToken, address _avatars) ERC721("BoxNFT", "BOX") {
         gameToken = GameToken(_gameToken);
         avatars = Avatars(_avatars);
-        owner = msg.sender;
 
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(PAUSER_ROLE, msg.sender);
@@ -70,32 +68,33 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
 
     function unbox(uint256 tokenId) public {
         require(ownerOf(tokenId) == msg.sender, "You are not the owner of this box");
+        require(_exists(tokenId), "Token ID does not exist");
 
         BoxType ownedBox = _tokenBoxType[tokenId];
         _burn(tokenId);
 
-        string memory boxName = _getBoxName(ownedBox);
+        string memory boxName = _boxTypeToString(ownedBox);
         uint256 avatarId = avatars.mintRandomAvatarFromBox(boxName);
 
         uint256 tokenReward = tokensRewarded[ownedBox];
         gameToken.mint(msg.sender, tokenReward);
 
-        emit BoxUnboxed(msg.sender, avatarId, tokenReward);
+        emit BoxUnboxed(msg.sender, avatarId, tokenReward, ownedBox);
     }
 
-    function setBoxPrice(BoxType _boxType, uint256 _priceInWei) external onlyOwner {
+    function setBoxPrice(BoxType _boxType, uint256 _priceInWei) external onlyRole(DEFAULT_ADMIN_ROLE) {
         boxPriceInWei[_boxType] = _priceInWei;
     }
 
-    function setTokenReward(BoxType _boxType, uint256 _tokenReward) external onlyOwner {
+    function setTokenReward(BoxType _boxType, uint256 _tokenReward) external onlyRole(DEFAULT_ADMIN_ROLE) {
         tokensRewarded[_boxType] = _tokenReward;
     }
 
-    function setBoxURI(BoxType _boxType, string memory _uri) external onlyOwner {
+    function setBoxURI(BoxType _boxType, string memory _uri) external onlyRole(DEFAULT_ADMIN_ROLE) {
         boxURIs[_boxType] = _uri;
     }
 
-    function _getBoxName(BoxType _boxType) private pure returns (string memory) {
+    function _boxTypeToString(BoxType _boxType) internal pure returns (string memory) {
         if (_boxType == BoxType.Bronze) return "Bronze Box";
         if (_boxType == BoxType.Silver) return "Silver Box";
         return "Gold Box";

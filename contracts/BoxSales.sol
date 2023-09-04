@@ -27,7 +27,7 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
     mapping(uint256 => BoxType) internal _tokenBoxType;
 
     event BoxPurchased(address indexed user, BoxType boxType);
-    event BoxUnboxed(address indexed user, uint256 avatarId, uint256 tokenAmount, BoxType boxType);
+    event BoxUnboxed(address indexed user, uint256 avatarId, string avatarType, string rarity, uint16 durability, uint256 tokenAmount, BoxType boxType);
 
     constructor(address _gameToken, address _avatars) ERC721("BoxNFT", "BOX") {
         gameToken = GameToken(_gameToken);
@@ -51,79 +51,33 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
         boxURIs[BoxType.Gold] = "https://leagueofcryptowars.com/metadata/gold_box.json";
     }
 
-        // 1. Function to check the total count of every box type for a given owner
-    function getBoxCountByType(address owner) public view returns (uint256 bronzeCount, uint256 silverCount, uint256 goldCount) {
-        uint256 totalOwned = balanceOf(owner);
-        uint256 bronze = 0;
-        uint256 silver = 0;
-        uint256 gold = 0;
+function withdrawBalance() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    payable(msg.sender).transfer(address(this).balance);
+}
 
-        for (uint256 i = 0; i < totalOwned; i++) {
-            uint256 tokenId = tokenOfOwnerByIndex(owner, i);
-            BoxType boxType = _tokenBoxType[tokenId];
-            if (boxType == BoxType.Bronze) {
-                bronze++;
-            } else if (boxType == BoxType.Silver) {
-                silver++;
-            } else if (boxType == BoxType.Gold) {
-                gold++;
-            }
-        }
 
-        return (bronze, silver, gold);
-    }
+function buyBox(BoxType _boxType) public payable {
+    require(msg.value == boxPriceInWei[_boxType], "Incorrect Ether sent");
 
-    // 2. Function to get the type of a box given its ID
-    function getBoxTypeString(uint256 tokenId) public view returns (string memory) {
-        BoxType boxType = _tokenBoxType[tokenId];
-        return _boxTypeToString(boxType);
-    }
+    uint256 newTokenId = _tokenIdCounter.current();
+    _mint(msg.sender, newTokenId);
+    _setTokenURI(newTokenId, boxURIs[_boxType]);
 
-    // 3. Function to get a list of box IDs and their types for a given owner
-    function getBoxesByOwner(address owner) public view returns (uint256[] memory tokenIds, string[] memory boxTypes) {
-        uint256 totalOwned = balanceOf(owner);
-        tokenIds = new uint256[](totalOwned);
-        boxTypes = new string[](totalOwned);
+    // Associate the minted tokenId with its BoxType
+    _tokenBoxType[newTokenId] = _boxType;
 
-        for (uint256 i = 0; i < totalOwned; i++) {
-            uint256 tokenId = tokenOfOwnerByIndex(owner, i);
-            tokenIds[i] = tokenId;
-            boxTypes[i] = _boxTypeToString(_tokenBoxType[tokenId]);
-        }
+    _tokenIdCounter.increment();
 
-        return (tokenIds, boxTypes);
-    }
+    emit BoxPurchased(msg.sender, _boxType);
 
-    function buyBox(BoxType _boxType) public payable {
-        require(msg.value == boxPriceInWei[_boxType], "Incorrect Ether sent");
+   // Automatically unbox the avatar and drop it to the buyer
+    (uint256 avatarId, string memory avatarType, string memory avatarRarity, uint16 avatarDurability) = avatars.mintRandomAvatarFromBox(msg.sender, _boxTypeToString(_boxType));
+    uint256 tokenAmount = tokensRewarded[_boxType];
+    gameToken.mint(msg.sender, tokenAmount);
 
-        uint256 newTokenId = _tokenIdCounter.current();
-        _mint(msg.sender, newTokenId);
-        _setTokenURI(newTokenId, boxURIs[_boxType]);
+    emit BoxUnboxed(msg.sender, avatarId, avatarType, avatarRarity, avatarDurability, tokenAmount, _boxType);
+}
 
-        // Associate the minted tokenId with its BoxType
-        _tokenBoxType[newTokenId] = _boxType;
-
-        _tokenIdCounter.increment();
-
-        emit BoxPurchased(msg.sender, _boxType);
-    }
-
-    function unbox(uint256 tokenId) public {
-        require(ownerOf(tokenId) == msg.sender, "You are not the owner of this box");
-        require(_exists(tokenId), "Token ID does not exist");
-
-        BoxType ownedBox = _tokenBoxType[tokenId];
-        _burn(tokenId);
-
-        string memory boxName = _boxTypeToString(ownedBox);
-        uint256 avatarId = avatars.mintRandomAvatarFromBox(boxName);
-
-        uint256 tokenReward = tokensRewarded[ownedBox];
-        gameToken.mint(msg.sender, tokenReward);
-
-        emit BoxUnboxed(msg.sender, avatarId, tokenReward, ownedBox);
-    }
 
     function setBoxPrice(BoxType _boxType, uint256 _priceInWei) external onlyRole(DEFAULT_ADMIN_ROLE) {
         boxPriceInWei[_boxType] = _priceInWei;
@@ -169,8 +123,6 @@ contract BoxSales is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Acces
     {
         super._beforeTokenTransfer(from, to, tokenId, batchSize);
     }
-
-    // The following functions are overrides required by Solidity.
 
     function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
         super._burn(tokenId);
